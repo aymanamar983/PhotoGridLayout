@@ -18,8 +18,7 @@ public class GridManager : MonoBehaviour
     public float animationDuration = 0.4f;
 
     private const string dataUrl = "https://abbinj3.sg-host.com/list.php";
-    private HashSet<string> savedUserUrls = new HashSet<string>();  // saved new user URLs loaded from PlayerPrefs
-    private HashSet<string> knownUrls = new HashSet<string>();       // all URLs processed or saved (to avoid duplicates)
+    private HashSet<string> savedUserUrls = new HashSet<string>();  // URLs saved persistently (previous new users)
     private Queue<string> imageQueue = new Queue<string>();
     private bool isProcessingImage = false;
     private List<GameObject> spawnedImages = new List<GameObject>();
@@ -28,51 +27,48 @@ public class GridManager : MonoBehaviour
 
     void Start()
     {
-        // Set GridLayoutGroup fixed columns to 9
+        // Configure Grid Layout
         gridLayoutGroup.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
         gridLayoutGroup.constraintCount = 9;
         gridLayoutGroup.spacing = new Vector2(spacing, spacing);
 
-        LoadSavedNewUserUrls();
+        LoadSavedUserUrls();
+
+        // Instantiate saved user images without animation
         StartCoroutine(InstantiateSavedImages());
 
-        InvokeRepeating(nameof(CheckForUpdates), 5f, 10f);  // start checking for new users after 5 sec delay
+        // Start periodically checking for new users on server every 10 sec (after 5 sec delay)
+        InvokeRepeating(nameof(CheckForUpdates), 5f, 10f);
     }
 
-    // Load only saved new user URLs from PlayerPrefs
-    void LoadSavedNewUserUrls()
+    void LoadSavedUserUrls()
     {
         savedUserUrls.Clear();
-        knownUrls.Clear();
-
         string savedUrlsString = PlayerPrefs.GetString("SavedNewUserUrls", "");
         if (!string.IsNullOrEmpty(savedUrlsString))
         {
             string[] urls = savedUrlsString.Split(';');
-            foreach (string url in urls)
+            foreach (var url in urls)
             {
-                if (!string.IsNullOrEmpty(url))
+                if (!string.IsNullOrWhiteSpace(url))
                 {
                     savedUserUrls.Add(url);
-                    knownUrls.Add(url);
                 }
             }
         }
     }
 
-    // Save current savedUserUrls to PlayerPrefs (called after adding new user)
-    void SaveNewUserUrls()
+    void SaveUserUrls()
     {
         PlayerPrefs.SetString("SavedNewUserUrls", string.Join(";", savedUserUrls));
         PlayerPrefs.Save();
     }
 
-    // Instantiate saved new user images instantly (no animation)
     IEnumerator InstantiateSavedImages()
     {
         foreach (string url in savedUserUrls)
         {
-            yield return StartCoroutine(DownloadAndAddImage(url, animate: false));
+            yield return DownloadAndAddImage(url, animate: false);
         }
     }
 
@@ -96,13 +92,14 @@ public class GridManager : MonoBehaviour
         PhotoEntry[] photos = JsonHelper.FromJson<PhotoEntry>(json);
 
         int newUserCount = 0;
+
         foreach (PhotoEntry photo in photos)
         {
-            if (!knownUrls.Contains(photo.url))
+            if (!savedUserUrls.Contains(photo.url))
             {
-                knownUrls.Add(photo.url);
+                // New user detected
+                savedUserUrls.Add(photo.url);
                 imageQueue.Enqueue(photo.url);
-                savedUserUrls.Add(photo.url);  // Add new user url to saved set
                 newUserCount++;
             }
         }
@@ -110,7 +107,7 @@ public class GridManager : MonoBehaviour
         if (newUserCount > 0)
         {
             Debug.Log($"New users detected: {newUserCount}. Starting to download images.");
-            SaveNewUserUrls(); // Save the updated list immediately
+            SaveUserUrls(); // Save immediately after detecting new users
         }
         else
         {
