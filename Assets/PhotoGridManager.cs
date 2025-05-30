@@ -6,8 +6,8 @@ using UnityEngine.UI;
 
 public class PhotoGridManager : MonoBehaviour
 {
-    public GameObject imagePrefab;           // Assign your ImageItem prefab here
-    public Transform imageGridParent;        // Assign ImageGrid (Content) here
+    public GameObject imagePrefab;           // Assign your RawImage prefab
+    public Transform imageGridParent;        // Assign the Content (ImageGrid) here
 
     private const string dataUrl = "https://abbinj3.sg-host.com/list.php";
     private HashSet<string> downloadedUrls = new HashSet<string>();
@@ -58,6 +58,10 @@ public class PhotoGridManager : MonoBehaviour
             GameObject imageObj = Instantiate(imagePrefab, imageGridParent);
             RawImage img = imageObj.GetComponent<RawImage>();
             img.texture = texture;
+
+            // Ensure image size matches GridLayoutGroup cell size
+            RectTransform rt = imageObj.GetComponent<RectTransform>();
+            rt.sizeDelta = new Vector2(200f, 200f); // Match the GridLayoutGroup cell size
         }
         else
         {
