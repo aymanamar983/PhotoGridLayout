@@ -25,6 +25,11 @@ public class PhotoGridManager : MonoBehaviour
 
     void Start()
     {
+        // Set GridLayoutGroup fixed columns to 9
+        gridLayoutGroup.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+        gridLayoutGroup.constraintCount = 9;
+        gridLayoutGroup.spacing = new Vector2(spacing, spacing);
+
         InvokeRepeating(nameof(CheckForUpdates), 0f, 10f);
     }
 
@@ -81,7 +86,7 @@ public class PhotoGridManager : MonoBehaviour
 
             Texture2D texture = DownloadHandlerTexture.GetContent(request);
 
-            // 1. Show new image in center
+            // 1. Show new image in center with scale animation
             GameObject centerImage = Instantiate(imagePrefab, canvasTransform);
             RectTransform rect = centerImage.GetComponent<RectTransform>();
             rect.anchorMin = new Vector2(0.5f, 0.5f);
@@ -99,16 +104,51 @@ public class PhotoGridManager : MonoBehaviour
             // Wait 5 seconds
             yield return new WaitForSeconds(5f);
 
-            // 2. Move to grid layout
-            GameObject gridImage = Instantiate(imagePrefab, imageGridParent);
-            gridImage.GetComponent<RawImage>().texture = texture;
-            spawnedImages.Add(gridImage);
+            // 2. Tween move image smoothly to its grid position
+            int nextIndex = spawnedImages.Count; // Next index in grid
+            Vector3 targetWorldPos = GetNextGridPosition(nextIndex);
 
-            Destroy(centerImage);
-            UpdateGridCellSize();
+            // Tween position and scale simultaneously (scale remains 1 here but just in case)
+            yield return DOTween.Sequence()
+                .Join(centerImage.transform.DOMove(targetWorldPos, 0.6f).SetEase(Ease.InOutQuad))
+                .Join(centerImage.transform.DOScale(1f, 0.6f).SetEase(Ease.OutBack))
+                .WaitForCompletion();
+
+            // 3. Now set parent to grid layout and reset transform for proper layout
+            centerImage.transform.SetParent(imageGridParent);
+            rect.localScale = Vector3.one;
+            rect.anchoredPosition = Vector2.zero;
+
+            spawnedImages.Add(centerImage);
+
+            // Call UpdateGridCellSize every 20 images added
+            if (spawnedImages.Count % 20 == 0)
+            {
+                UpdateGridCellSize();
+            }
         }
 
         isProcessingImage = false;
+    }
+
+    Vector3 GetNextGridPosition(int index)
+    {
+        int columns = gridLayoutGroup.constraintCount;
+        int row = index / columns;
+        int column = index % columns;
+
+        Vector2 cellSize = gridLayoutGroup.cellSize;
+        Vector2 spacing = gridLayoutGroup.spacing;
+
+        // Calculate local position relative to grid layout's pivot (usually top-left corner)
+        float x = (cellSize.x + spacing.x) * column + cellSize.x / 2f;
+        float y = -((cellSize.y + spacing.y) * row + cellSize.y / 2f);
+
+        Vector3 localPos = new Vector3(x, y, 0f);
+        RectTransform gridRect = imageGridParent.GetComponent<RectTransform>();
+        Vector3 worldPos = gridRect.TransformPoint(localPos);
+
+        return worldPos;
     }
 
     void UpdateGridCellSize()
@@ -116,12 +156,11 @@ public class PhotoGridManager : MonoBehaviour
         int totalImages = spawnedImages.Count;
         if (totalImages == 0) return;
 
-        int maxColumns = Mathf.FloorToInt((maxWidth + spacing) / (300f + spacing));
-        int columnCount = Mathf.Min(totalImages, maxColumns);
-        int rowCount = Mathf.CeilToInt((float)totalImages / columnCount);
+        int columns = 9; // Fixed columns
+        int rows = Mathf.CeilToInt((float)totalImages / columns);
 
-        float cellWidth = (maxWidth - spacing * (columnCount - 1)) / columnCount;
-        float cellHeight = (maxHeight - spacing * (rowCount - 1)) / rowCount;
+        float cellWidth = (maxWidth - spacing * (columns - 1)) / columns;
+        float cellHeight = (maxHeight - spacing * (rows - 1)) / rows;
 
         Vector2 targetCellSize = new Vector2(cellWidth, cellHeight);
 
