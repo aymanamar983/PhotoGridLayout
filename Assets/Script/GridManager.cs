@@ -19,10 +19,8 @@ public class GridManager : MonoBehaviour
 
     private const string dataUrl = "https://abbinj3.sg-host.com/list.php";
     private HashSet<string> downloadedUrls = new HashSet<string>();
-    private List<GameObject> spawnedImages = new List<GameObject>();
     private Queue<string> imageQueue = new Queue<string>();
     private bool isProcessingImage = false;
-    private int lastRowCount = 0;
 
     void Start()
     {
@@ -30,7 +28,9 @@ public class GridManager : MonoBehaviour
         gridLayoutGroup.constraintCount = 9;
         gridLayoutGroup.spacing = new Vector2(spacing, spacing);
 
+        // Start periodic checking but do NOT load images until new users appear
         InvokeRepeating(nameof(CheckForUpdates), 0f, 10f);
+        
     }
 
     void CheckForUpdates()
@@ -52,18 +52,32 @@ public class GridManager : MonoBehaviour
         string json = request.downloadHandler.text;
         PhotoEntry[] photos = JsonHelper.FromJson<PhotoEntry>(json);
 
+        bool newUserFound = false;
+
         foreach (PhotoEntry photo in photos)
         {
-            if (!downloadedUrls.Contains(photo.url))
+            string normalizedUrl = photo.url.Trim().ToLower();
+
+            // Only enqueue if this URL wasn't downloaded before
+            if (!downloadedUrls.Contains(normalizedUrl))
             {
-                downloadedUrls.Add(photo.url);
+                downloadedUrls.Add(normalizedUrl);
                 imageQueue.Enqueue(photo.url);
+                newUserFound = true;
             }
         }
 
-        if (!isProcessingImage && imageQueue.Count > 0)
+        if (newUserFound)
         {
-            StartCoroutine(ProcessNextImage());
+            Debug.Log("New user detected. Starting to download image.");
+            if (!isProcessingImage)
+            {
+                StartCoroutine(ProcessNextImage());
+            }
+        }
+        else
+        {
+            Debug.Log("No new users found.");
         }
     }
 
@@ -86,54 +100,36 @@ public class GridManager : MonoBehaviour
 
             Texture2D texture = DownloadHandlerTexture.GetContent(request);
 
-            // Instantiate image prefab under canvas (centered)
-            GameObject centerImage = Instantiate(imagePrefab, canvasTransform);
-            RectTransform rect = centerImage.GetComponent<RectTransform>();
-
+            GameObject newImageGO = Instantiate(imagePrefab, canvasTransform);
+            RectTransform rect = newImageGO.GetComponent<RectTransform>();
             rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0.5f, 0.5f);
             rect.anchoredPosition = Vector2.zero;
-            centerImage.transform.localScale = Vector3.zero;
+            newImageGO.transform.localScale = Vector3.zero;
 
-            RawImage rawImg = centerImage.GetComponent<RawImage>();
+            RawImage rawImg = newImageGO.GetComponent<RawImage>();
             rawImg.texture = texture;
 
-            // Scale up from zero to full size in center
-            yield return centerImage.transform.DOScale(1f, 0.6f).SetEase(Ease.OutBack).WaitForCompletion();
+            // Animate scale up in center
+            yield return newImageGO.transform.DOScale(1f, 0.6f).SetEase(Ease.OutBack).WaitForCompletion();
 
-            // Wait before moving to grid
-            yield return new WaitForSeconds(1f);
+            // Move to grid layout position
+            newImageGO.transform.SetParent(imageGridParent, false);
+            int index = imageGridParent.childCount - 1;
+            Vector3 targetPos = GetGridPosition(index);
 
-            // Calculate target grid position in world space
-            int nextIndex = spawnedImages.Count;
-            Vector3 targetWorldPos = GetNextGridPosition(nextIndex);
+            yield return newImageGO.transform.DOMove(targetPos, 0.6f).SetEase(Ease.InOutQuad).WaitForCompletion();
 
-            // Move from center to grid position while keeping scale 1
-            yield return centerImage.transform.DOMove(targetWorldPos, 0.6f).SetEase(Ease.InOutQuad).WaitForCompletion();
-
-            // Reparent to grid layout parent and reset local position & scale for layout system
-            centerImage.transform.SetParent(imageGridParent);
+            // Reset local position and scale to fit grid nicely
             rect.localScale = Vector3.one;
             rect.anchoredPosition = Vector2.zero;
 
-            spawnedImages.Add(centerImage);
-
-            // Update grid cell size if needed (after 25 images, when new row added)
-            int columns = gridLayoutGroup.constraintCount;
-            if (spawnedImages.Count >= 26)
-            {
-                int currentRowCount = Mathf.CeilToInt((float)spawnedImages.Count / columns);
-                if (currentRowCount > lastRowCount)
-                {
-                    UpdateGridCellSize(currentRowCount);
-                    lastRowCount = currentRowCount;
-                }
-            }
+            yield return new WaitForSeconds(0.5f); // small pause before next image
         }
 
         isProcessingImage = false;
     }
 
-    Vector3 GetNextGridPosition(int index)
+    Vector3 GetGridPosition(int index)
     {
         int columns = gridLayoutGroup.constraintCount;
         int row = index / columns;
@@ -150,21 +146,6 @@ public class GridManager : MonoBehaviour
         Vector3 worldPos = gridRect.TransformPoint(localPos);
 
         return worldPos;
-    }
-
-    void UpdateGridCellSize(int rowCount)
-    {
-        int columns = gridLayoutGroup.constraintCount;
-
-        float cellWidth = (maxWidth - spacing * (columns - 1)) / columns;
-        float cellHeight = (maxHeight - spacing * (rowCount - 1)) / rowCount;
-
-        Vector2 targetCellSize = new Vector2(cellWidth, cellHeight);
-
-        DOTween.To(() => gridLayoutGroup.cellSize,
-                   x => gridLayoutGroup.cellSize = x,
-                   targetCellSize,
-                   animationDuration);
     }
 
     [System.Serializable]

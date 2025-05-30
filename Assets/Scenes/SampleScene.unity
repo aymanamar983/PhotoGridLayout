@@ -1145,8 +1145,13 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   imagePrefab: {fileID: 5809450236019076056, guid: 93468f5c0c81e484e8d73555d53692b7, type: 3}
-  gridParent: {fileID: 725225851}
-  canvasRect: {fileID: 852673354}
+  imageGridParent: {fileID: 725225851}
+  gridLayoutGroup: {fileID: 725225853}
+  canvasTransform: {fileID: 852673354}
+  maxWidth: 1920
+  maxHeight: 1080
+  spacing: 10
+  animationDuration: 0.4
 --- !u!1 &1855199860
 GameObject:
   m_ObjectHideFlags: 0
