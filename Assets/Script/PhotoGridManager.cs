@@ -22,6 +22,7 @@ public class PhotoGridManager : MonoBehaviour
     private List<GameObject> spawnedImages = new List<GameObject>();
     private Queue<string> imageQueue = new Queue<string>();
     private bool isProcessingImage = false;
+    private int lastRowCount = 0;
 
     void Start()
     {
@@ -86,7 +87,6 @@ public class PhotoGridManager : MonoBehaviour
 
             Texture2D texture = DownloadHandlerTexture.GetContent(request);
 
-            // 1. Show new image in center with scale animation
             GameObject centerImage = Instantiate(imagePrefab, canvasTransform);
             RectTransform rect = centerImage.GetComponent<RectTransform>();
             rect.anchorMin = new Vector2(0.5f, 0.5f);
@@ -98,33 +98,33 @@ public class PhotoGridManager : MonoBehaviour
             RawImage rawImg = centerImage.GetComponent<RawImage>();
             rawImg.texture = texture;
 
-            // Animate scale up
             yield return centerImage.transform.DOScale(1f, 0.6f).SetEase(Ease.OutBack).WaitForCompletion();
-
-            // Wait 5 seconds
             yield return new WaitForSeconds(5f);
 
-            // 2. Tween move image smoothly to its grid position
-            int nextIndex = spawnedImages.Count; // Next index in grid
+            int nextIndex = spawnedImages.Count;
             Vector3 targetWorldPos = GetNextGridPosition(nextIndex);
 
-            // Tween position and scale simultaneously (scale remains 1 here but just in case)
             yield return DOTween.Sequence()
                 .Join(centerImage.transform.DOMove(targetWorldPos, 0.6f).SetEase(Ease.InOutQuad))
                 .Join(centerImage.transform.DOScale(1f, 0.6f).SetEase(Ease.OutBack))
                 .WaitForCompletion();
 
-            // 3. Now set parent to grid layout and reset transform for proper layout
             centerImage.transform.SetParent(imageGridParent);
             rect.localScale = Vector3.one;
             rect.anchoredPosition = Vector2.zero;
 
             spawnedImages.Add(centerImage);
 
-            // Call UpdateGridCellSize every 20 images added
-            if (spawnedImages.Count % 20 == 0)
+            // Resize grid only after 25 images, and only when a new row is added
+            int columns = gridLayoutGroup.constraintCount;
+            if (spawnedImages.Count >= 26)
             {
-                UpdateGridCellSize();
+                int currentRowCount = Mathf.CeilToInt((float)spawnedImages.Count / columns);
+                if (currentRowCount > lastRowCount)
+                {
+                    UpdateGridCellSize(currentRowCount);
+                    lastRowCount = currentRowCount;
+                }
             }
         }
 
@@ -140,7 +140,6 @@ public class PhotoGridManager : MonoBehaviour
         Vector2 cellSize = gridLayoutGroup.cellSize;
         Vector2 spacing = gridLayoutGroup.spacing;
 
-        // Calculate local position relative to grid layout's pivot (usually top-left corner)
         float x = (cellSize.x + spacing.x) * column + cellSize.x / 2f;
         float y = -((cellSize.y + spacing.y) * row + cellSize.y / 2f);
 
@@ -151,16 +150,12 @@ public class PhotoGridManager : MonoBehaviour
         return worldPos;
     }
 
-    void UpdateGridCellSize()
+    void UpdateGridCellSize(int rowCount)
     {
-        int totalImages = spawnedImages.Count;
-        if (totalImages == 0) return;
-
-        int columns = 9; // Fixed columns
-        int rows = Mathf.CeilToInt((float)totalImages / columns);
+        int columns = gridLayoutGroup.constraintCount;
 
         float cellWidth = (maxWidth - spacing * (columns - 1)) / columns;
-        float cellHeight = (maxHeight - spacing * (rows - 1)) / rows;
+        float cellHeight = (maxHeight - spacing * (rowCount - 1)) / rowCount;
 
         Vector2 targetCellSize = new Vector2(cellWidth, cellHeight);
 

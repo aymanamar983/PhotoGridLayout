@@ -337,7 +337,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!224 &397023668
 RectTransform:
   m_ObjectHideFlags: 0
@@ -1088,6 +1088,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1487253470}
+  - component: {fileID: 1487253471}
   - component: {fileID: 1487253472}
   m_Layer: 0
   m_Name: ScriptManager
@@ -1111,14 +1112,14 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &1487253472
+--- !u!114 &1487253471
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1487253469}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: e4aa1235754e5dd44a1776171bb80009, type: 3}
   m_Name: 
@@ -1130,7 +1131,22 @@ MonoBehaviour:
   maxWidth: 1920
   maxHeight: 1080
   spacing: 10
-  animationDuration: 0.5
+  animationDuration: 0.4
+--- !u!114 &1487253472
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1487253469}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f8d5d15247619b548a4771317a63ad95, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  imagePrefab: {fileID: 5809450236019076056, guid: 93468f5c0c81e484e8d73555d53692b7, type: 3}
+  gridParent: {fileID: 725225851}
+  canvasRect: {fileID: 852673354}
 --- !u!1 &1855199860
 GameObject:
   m_ObjectHideFlags: 0

@@ -1,4 +1,4 @@
-using System.Collections;
+﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Networking;
@@ -17,13 +17,12 @@ public class GridManager : MonoBehaviour
     public float spacing = 10f;
     public float animationDuration = 0.4f;
 
-    private const string userUrl = "https://abbinj3.sg-host.com/";
     private const string dataUrl = "https://abbinj3.sg-host.com/list.php";
-
     private HashSet<string> downloadedUrls = new HashSet<string>();
     private List<GameObject> spawnedImages = new List<GameObject>();
     private Queue<string> imageQueue = new Queue<string>();
     private bool isProcessingImage = false;
+    private int lastRowCount = 0;
 
     void Start()
     {
@@ -31,25 +30,7 @@ public class GridManager : MonoBehaviour
         gridLayoutGroup.constraintCount = 9;
         gridLayoutGroup.spacing = new Vector2(spacing, spacing);
 
-        StartCoroutine(FetchUserData());
-    }
-
-    IEnumerator FetchUserData()
-    {
-        UnityWebRequest userRequest = UnityWebRequest.Get(userUrl);
-        yield return userRequest.SendWebRequest();
-
-        if (userRequest.result != UnityWebRequest.Result.Success)
-        {
-            Debug.LogError("Error fetching user data: " + userRequest.error);
-            yield break;
-        }
-
-        string json = userRequest.downloadHandler.text;
-        UserData userData = JsonUtility.FromJson<UserData>(json);
-        Debug.Log($"User: {userData.name}, {userData.email}, {userData.phone}, {userData.photo}");
-
-        InvokeRepeating(nameof(CheckForUpdates), 0f, 5f);
+        InvokeRepeating(nameof(CheckForUpdates), 0f, 10f);
     }
 
     void CheckForUpdates()
@@ -105,56 +86,78 @@ public class GridManager : MonoBehaviour
 
             Texture2D texture = DownloadHandlerTexture.GetContent(request);
 
+            // Instantiate image prefab under canvas (centered)
             GameObject centerImage = Instantiate(imagePrefab, canvasTransform);
             RectTransform rect = centerImage.GetComponent<RectTransform>();
-            rect.anchorMin = new Vector2(0.5f, 0.5f);
-            rect.anchorMax = new Vector2(0.5f, 0.5f);
-            rect.pivot = new Vector2(0.5f, 0.5f);
+
+            rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0.5f, 0.5f);
             rect.anchoredPosition = Vector2.zero;
             centerImage.transform.localScale = Vector3.zero;
 
             RawImage rawImg = centerImage.GetComponent<RawImage>();
             rawImg.texture = texture;
 
-            // Animate in center
+            // Scale up from zero to full size in center
             yield return centerImage.transform.DOScale(1f, 0.6f).SetEase(Ease.OutBack).WaitForCompletion();
 
-            // Wait 5 seconds
-            yield return new WaitForSeconds(5f);
+            // Wait before moving to grid
+            yield return new WaitForSeconds(1f);
 
-            // Move to grid with animation
-            centerImage.transform.SetParent(imageGridParent, false);
-            rect.SetAsLastSibling();
+            // Calculate target grid position in world space
+            int nextIndex = spawnedImages.Count;
+            Vector3 targetWorldPos = GetNextGridPosition(nextIndex);
+
+            // Move from center to grid position while keeping scale 1
+            yield return centerImage.transform.DOMove(targetWorldPos, 0.6f).SetEase(Ease.InOutQuad).WaitForCompletion();
+
+            // Reparent to grid layout parent and reset local position & scale for layout system
+            centerImage.transform.SetParent(imageGridParent);
             rect.localScale = Vector3.one;
-
-            // Smooth move to target grid position
-            LayoutRebuilder.ForceRebuildLayoutImmediate((RectTransform)imageGridParent);
-
-            Vector3 finalPos = rect.anchoredPosition;
-            rect.anchoredPosition = new Vector2(0f, 0f);
-            rect.DOAnchorPos(finalPos, 0.5f).SetEase(Ease.OutQuad);
+            rect.anchoredPosition = Vector2.zero;
 
             spawnedImages.Add(centerImage);
 
-            if (spawnedImages.Count % 20 == 0)
+            // Update grid cell size if needed (after 25 images, when new row added)
+            int columns = gridLayoutGroup.constraintCount;
+            if (spawnedImages.Count >= 26)
             {
-                UpdateGridCellSize();
+                int currentRowCount = Mathf.CeilToInt((float)spawnedImages.Count / columns);
+                if (currentRowCount > lastRowCount)
+                {
+                    UpdateGridCellSize(currentRowCount);
+                    lastRowCount = currentRowCount;
+                }
             }
         }
 
         isProcessingImage = false;
     }
 
-    void UpdateGridCellSize()
+    Vector3 GetNextGridPosition(int index)
     {
-        int totalImages = spawnedImages.Count;
-        if (totalImages == 0) return;
+        int columns = gridLayoutGroup.constraintCount;
+        int row = index / columns;
+        int column = index % columns;
 
-        int columns = 9;
-        int rows = Mathf.CeilToInt((float)totalImages / columns);
+        Vector2 cellSize = gridLayoutGroup.cellSize;
+        Vector2 spacing = gridLayoutGroup.spacing;
+
+        float x = (cellSize.x + spacing.x) * column + cellSize.x / 2f;
+        float y = -((cellSize.y + spacing.y) * row + cellSize.y / 2f);
+
+        Vector3 localPos = new Vector3(x, y, 0f);
+        RectTransform gridRect = imageGridParent.GetComponent<RectTransform>();
+        Vector3 worldPos = gridRect.TransformPoint(localPos);
+
+        return worldPos;
+    }
+
+    void UpdateGridCellSize(int rowCount)
+    {
+        int columns = gridLayoutGroup.constraintCount;
 
         float cellWidth = (maxWidth - spacing * (columns - 1)) / columns;
-        float cellHeight = (maxHeight - spacing * (rows - 1)) / rows;
+        float cellHeight = (maxHeight - spacing * (rowCount - 1)) / rowCount;
 
         Vector2 targetCellSize = new Vector2(cellWidth, cellHeight);
 
@@ -171,15 +174,6 @@ public class GridManager : MonoBehaviour
         public string email;
         public string phone;
         public string url;
-    }
-
-    [System.Serializable]
-    public class UserData
-    {
-        public string name;
-        public string email;
-        public string phone;
-        public string photo;
     }
 
     public static class JsonHelper
